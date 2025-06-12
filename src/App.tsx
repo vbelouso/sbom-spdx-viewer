@@ -1,103 +1,127 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Box, Typography, LinearProgress, Alert, Container, Stack, Card, CardContent } from '@mui/material';
+import React, { useState, useMemo, useCallback } from 'react';
+import {
+  Box,
+  Container,
+  Typography,
+  LinearProgress,
+  Alert,
+  Button,
+  Tabs,
+  Tab,
+  Stack,
+  Card,
+  CardContent,
+  AlertTitle,
+} from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+
 import { useSBOMLoader } from './hooks/useSBOMLoader';
 import { PackageList } from './components/PackageList';
 import SimpleFileUpload from './components/SimpleFileUpload';
+import { useSbomDiff } from './hooks/useSbomDiff';
+import { SbomDiffView } from './components/SbomDiffView';
+import FileUploadCard from './components/FileUploadCard';
 
 const getPurlType = (purl: string | undefined): string | null => {
-  if (!purl || !purl.startsWith('pkg:')) {
+  if (!purl) return null;
+  try {
+    const type = purl.split(':')[1].split('/')[0];
+    return type || null;
+  } catch (e) {
     return null;
   }
-  const typeEndIndex = purl.indexOf('/', 4);
-  if (typeEndIndex === -1) {
-    return purl.substring(4);
-  }
-  return purl.substring(4, typeEndIndex);
 };
 
 function App() {
-  const { status, data, error, isPending, loadSbomFile, reset } = useSBOMLoader();
+  const [view, setView] = useState<'single' | 'diff'>('single');
+
+  const {
+    status: singleFileStatus,
+    data: singleFileData,
+    error: singleFileError,
+    isPending: singleFileIsPending,
+    loadSbomFile,
+    reset: resetSingleFileLoader,
+  } = useSBOMLoader();
   const [globalFilter, setGlobalFilter] = useState('');
-  const [packageTypeFilter, setPackageTypeFilter] = useState('oci');
+  const [packageTypeFilter, setPackageTypeFilter] = useState('all');
 
   const availablePackageTypes = useMemo(() => {
-    if (!data?.packages) return [];
+    if (!singleFileData?.packages) return [];
     const types = new Set<string>();
-    data.packages.forEach(pkg => {
-      const packageManagerRef = pkg.externalRefs?.find(
-        ref => ref.referenceCategory === 'PACKAGE_MANAGER' && ref.referenceType === 'purl'
-      );
-      if (packageManagerRef) {
-        const type = getPurlType(packageManagerRef.referenceLocator);
-        if (type) types.add(type);
-      }
+    singleFileData.packages.forEach(pkg => {
+      const purl = pkg.externalRefs?.find(ref => ref.referenceType === 'purl')?.referenceLocator;
+      const type = getPurlType(purl);
+      if (type) types.add(type);
     });
-    return Array.from(types).sort();
-  }, [data?.packages]);
+    return ['all', ...Array.from(types).sort()];
+  }, [singleFileData?.packages]);
 
   const filteredPackages = useMemo(() => {
-    if (!data?.packages) return [];
-    if (packageTypeFilter === 'ALL') return data.packages;
-
-    return data.packages.filter(pkg =>
-      pkg.externalRefs?.some(
-        ref =>
-          ref.referenceCategory === 'PACKAGE_MANAGER' &&
-          ref.referenceType === 'purl' &&
-          getPurlType(ref.referenceLocator) === packageTypeFilter
-      )
-    );
-  }, [data?.packages, packageTypeFilter]);
-
-  useEffect(() => {
-    if (status === 'success' && availablePackageTypes.length > 0) {
-      if (!availablePackageTypes.includes('oci')) {
-        setPackageTypeFilter('ALL');
-      } else {
-        setPackageTypeFilter('oci');
-      }
+    if (!singleFileData?.packages) return [];
+    if (packageTypeFilter === 'all') {
+      return singleFileData.packages;
     }
-  }, [status, availablePackageTypes]);
+    return singleFileData.packages.filter(pkg => {
+      const purl = pkg.externalRefs?.find(ref => ref.referenceType === 'purl')?.referenceLocator;
+      return getPurlType(purl) === packageTypeFilter;
+    });
+  }, [singleFileData?.packages, packageTypeFilter]);
 
   const handleFileChange = useCallback(
     (_event: unknown, file: File) => {
       setGlobalFilter('');
+      setPackageTypeFilter('all');
       loadSbomFile(file);
     },
     [loadSbomFile]
   );
 
   const handleLoadNewFile = useCallback(() => {
-    reset();
-  }, [reset]);
+    resetSingleFileLoader();
+  }, [resetSingleFileLoader]);
 
-  return (
-    <Container maxWidth="xl" sx={{ my: 4 }}>
-      {(isPending || status === 'parsing') && (
+  const diffState = useSbomDiff();
+  const [baseFile, setBaseFile] = useState<File | null>(null);
+  const [newFile, setNewFile] = useState<File | null>(null);
+
+  const handleViewChange = (_event: React.SyntheticEvent, newView: 'single' | 'diff') => {
+    if (newView !== view) {
+      resetSingleFileLoader();
+      diffState.resetDiff();
+      setBaseFile(null);
+      setNewFile(null);
+      setView(newView);
+    }
+  };
+
+  const renderSingleView = () => {
+    if (singleFileIsPending || singleFileStatus === 'parsing') {
+      return (
         <Box
           sx={{
-            height: '100vh',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             gap: 2,
+            mt: 4,
           }}
         >
           <Typography>Parsing SBOM...</Typography>
           <LinearProgress sx={{ width: 300 }} />
         </Box>
-      )}
-
-      {status === 'idle' && <SimpleFileUpload onFileInputChange={handleFileChange} />}
-
-      {status === 'error' && (
+      );
+    }
+    if (singleFileStatus === 'error') {
+      return (
         <Alert severity="error" sx={{ mt: 2 }}>
-          Failed to parse SBOM: {error}
+          Failed to parse SBOM: {singleFileError}
         </Alert>
-      )}
-
-      {status === 'success' && data && (
+      );
+    }
+    if (singleFileStatus === 'success' && singleFileData) {
+      return (
         <>
           <Card sx={{ mb: 2 }}>
             <CardContent>
@@ -106,35 +130,99 @@ function App() {
               </Typography>
               <Stack spacing={1}>
                 <Typography>
-                  <b>Name:</b> {data.name}
+                  <b>Name:</b> {singleFileData.name}
                 </Typography>
                 <Typography>
-                  <b>Created:</b> {new Date(data.creationInfo.created).toLocaleString()}
+                  <b>Created:</b> {new Date(singleFileData.creationInfo.created).toLocaleString()}
                 </Typography>
                 <Typography>
-                  <b>SPDX Version:</b> {data.spdxVersion}
+                  <b>SPDX Version:</b> {singleFileData.spdxVersion}
                 </Typography>
                 <Typography>
-                  <b>Document Namespace:</b> {data.documentNamespace}
-                </Typography>
-                <Typography>
-                  <b>Packages Displayed:</b> {filteredPackages.length} of {data.packages.length}
+                  <b>Packages Displayed:</b> {filteredPackages.length} of {singleFileData.packages.length}
                 </Typography>
               </Stack>
             </CardContent>
           </Card>
-
           <PackageList
             packages={filteredPackages}
             globalFilter={globalFilter}
             onGlobalFilterChange={setGlobalFilter}
-            onLoadNewFile={handleLoadNewFile}
             packageTypeFilter={packageTypeFilter}
             onPackageTypeFilterChange={setPackageTypeFilter}
             availablePackageTypes={availablePackageTypes}
+            onLoadNewFile={handleLoadNewFile}
           />
         </>
+      );
+    }
+
+    return <SimpleFileUpload onFileInputChange={handleFileChange} />;
+  };
+
+  const renderDiffView = () => (
+    <Box>
+      <Typography variant="h4" gutterBottom align="center" sx={{ mb: 1 }}>
+        Compare Two SBOMs
+      </Typography>
+
+      <Alert severity="info" icon={<InfoOutlinedIcon />} sx={{ mb: 3 }}>
+        <AlertTitle>OCI Packages Only</AlertTitle>
+        This comparison view focuses exclusively on packages with a `pkg:oci/...` PURL for the most accurate results.
+        Other package types are ignored in this view.
+      </Alert>
+
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
+        <FileUploadCard
+          title="Base SBOM (Old)"
+          fileName={baseFile?.name}
+          onFileSelect={setBaseFile}
+          disabled={diffState.status === 'diffing'}
+        />
+        <FileUploadCard
+          title="Compare SBOM (New)"
+          fileName={newFile?.name}
+          onFileSelect={setNewFile}
+          disabled={diffState.status === 'diffing'}
+        />
+      </Stack>
+
+      <Button
+        variant="contained"
+        size="large"
+        fullWidth
+        disabled={!baseFile || !newFile || diffState.status === 'diffing'}
+        onClick={() => baseFile && newFile && diffState.startDiff(baseFile, newFile)}
+        sx={{ my: 2, py: 1.5 }}
+      >
+        {diffState.status === 'diffing' ? diffState.progress || 'Comparing...' : 'Compare SBOMs'}
+      </Button>
+
+      {diffState.status === 'diffing' && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="caption" align="center" component="p" sx={{ mb: 1 }}>
+            {diffState.progress}
+          </Typography>
+          <LinearProgress />
+        </Box>
       )}
+      {diffState.status === 'error' && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {diffState.error}
+        </Alert>
+      )}
+      {diffState.status === 'success' && diffState.data && <SbomDiffView diff={diffState.data} />}
+    </Box>
+  );
+
+  return (
+    <Container maxWidth="xl" sx={{ my: 4 }}>
+      <Tabs value={view} onChange={handleViewChange} sx={{ mb: 3 }} centered>
+        <Tab label="Single SBOM Viewer" value="single" />
+        <Tab label="Compare SBOMs" value="diff" />
+      </Tabs>
+
+      {view === 'single' ? renderSingleView() : renderDiffView()}
     </Container>
   );
 }
