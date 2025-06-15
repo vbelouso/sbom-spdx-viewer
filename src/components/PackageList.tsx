@@ -16,7 +16,6 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Pagination,
   Stack,
   Paper,
   TextField,
@@ -24,7 +23,6 @@ import {
   Menu,
   Checkbox,
   Button,
-  Typography,
   InputAdornment,
 } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -32,22 +30,11 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ClearIcon from '@mui/icons-material/Clear';
-import {
-  useReactTable,
-  getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getExpandedRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-  type VisibilityState,
-  type ExpandedState,
-} from '@tanstack/react-table';
-import type { Package } from '../types/spdx.d.ts';
+import { flexRender, type ColumnDef } from '@tanstack/react-table';
 
-const PER_PAGE_OPTIONS = [10, 20, 50, 100, 200];
+import type { Package } from '@app/types/spdx.d.ts';
+import { useTableManager } from '@app/hooks/useTableManager';
+import { TablePagination } from './TablePagination';
 
 const usePackageColumns = (): ColumnDef<Package>[] =>
   useMemo(
@@ -87,44 +74,23 @@ export const PackageList: React.FC<PackageListProps> = React.memo(
     onPackageTypeFilterChange,
     availablePackageTypes,
   }) => {
-    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 });
-    const [expanded, setExpanded] = useState<ExpandedState>({});
-    const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
-
-    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-      downloadLocation: false,
-      copyrightText: false,
-      licenseConcluded: false,
-      purl: false,
-    });
-
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-    const open = Boolean(anchorEl);
-
     const columns = usePackageColumns();
 
-    const table = useReactTable({
+    const { table } = useTableManager<Package>({
       data: packages,
       columns,
-      getCoreRowModel: getCoreRowModel(),
-      getPaginationRowModel: getPaginationRowModel(),
-      getSortedRowModel: getSortedRowModel(),
-      getFilteredRowModel: getFilteredRowModel(),
-      getExpandedRowModel: getExpandedRowModel(),
-      getRowCanExpand: () => true,
-      state: {
-        pagination,
-        expanded,
-        sorting,
-        globalFilter,
-        columnVisibility,
+      initialState: {
+        sorting: [{ id: 'name', desc: false }],
+        columnVisibility: {
+          downloadLocation: false,
+          copyrightText: false,
+          licenseConcluded: false,
+          purl: false,
+        },
       },
-      onPaginationChange: setPagination,
-      onExpandedChange: setExpanded,
-      onSortingChange: setSorting,
-      onGlobalFilterChange: onGlobalFilterChange,
-      onColumnVisibilityChange: setColumnVisibility,
-      globalFilterFn: 'includesString',
+      state: { globalFilter },
+      onGlobalFilterChange,
     });
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
@@ -169,7 +135,6 @@ export const PackageList: React.FC<PackageListProps> = React.memo(
                   ))}
                 </Select>
               </FormControl>
-
               <Button variant="outlined" startIcon={<ViewColumnIcon />} onClick={handleMenuOpen}>
                 Columns
               </Button>
@@ -180,7 +145,7 @@ export const PackageList: React.FC<PackageListProps> = React.memo(
           </Stack>
         </Paper>
 
-        <Menu anchorEl={anchorEl} open={open} onClose={handleMenuClose}>
+        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
           {table.getAllLeafColumns().map(column => (
             <MenuItem key={column.id}>
               <FormControlLabel
@@ -199,59 +164,34 @@ export const PackageList: React.FC<PackageListProps> = React.memo(
 
         <Card>
           <CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-              <Typography variant="caption" color="text.secondary">
-                Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()} (
-                {table.getFilteredRowModel().rows.length.toLocaleString()} matching packages)
-              </Typography>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Rows per page</InputLabel>
-                  <Select
-                    value={table.getState().pagination.pageSize}
-                    label="Rows per page"
-                    onChange={e => table.setPageSize(Number(e.target.value))}
-                  >
-                    {PER_PAGE_OPTIONS.map(pageSize => (
-                      <MenuItem key={pageSize} value={pageSize}>
-                        {pageSize}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Pagination
-                  count={table.getPageCount()}
-                  page={table.getState().pagination.pageIndex + 1}
-                  onChange={(_e, value) => table.setPageIndex(value - 1)}
-                  color="primary"
-                  shape="rounded"
-                  showFirstButton
-                  showLastButton
-                />
-              </Stack>
-            </Stack>
+            <TablePagination
+              table={table}
+              totalRowCount={table.getFilteredRowModel().rows.length}
+              entityName="packages"
+            />
             <TableContainer>
               <Table stickyHeader>
                 <TableHead>
                   {table.getHeaderGroups().map(headerGroup => (
                     <TableRow key={headerGroup.id}>
                       <TableCell sx={{ width: '1%' }} />
-                      {headerGroup.headers.map(header => (
-                        <TableCell
-                          key={header.id}
-                          sortDirection={header.column.getIsSorted() ? header.column.getIsSorted() : false}
-                        >
-                          {header.isPlaceholder ? null : (
-                            <TableSortLabel
-                              active={!!header.column.getIsSorted()}
-                              direction={header.column.getIsSorted() === 'desc' ? 'desc' : 'asc'}
-                              onClick={header.column.getToggleSortingHandler()}
-                            >
-                              {flexRender(header.column.columnDef.header, header.getContext())}
-                            </TableSortLabel>
-                          )}
-                        </TableCell>
-                      ))}
+                      {headerGroup.headers.map(header => {
+                        const sortDirection = header.column.getIsSorted();
+
+                        return (
+                          <TableCell key={header.id} sortDirection={sortDirection}>
+                            {header.isPlaceholder ? null : (
+                              <TableSortLabel
+                                active={!!sortDirection}
+                                direction={sortDirection || 'asc'}
+                                onClick={header.column.getToggleSortingHandler()}
+                              >
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                              </TableSortLabel>
+                            )}
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                   ))}
                 </TableHead>

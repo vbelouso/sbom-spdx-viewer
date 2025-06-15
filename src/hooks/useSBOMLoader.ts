@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useTransition, useCallback } from 'react';
-import type { SPDXDocument, PerformanceMetrics } from '../types/spdx.d.ts';
+import type { SPDXDocument, PerformanceMetrics } from '@app/types/spdx.d.ts';
 
 type Status = 'idle' | 'parsing' | 'success' | 'error';
 

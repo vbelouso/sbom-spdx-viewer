@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { Package } from '../types/spdx';
+import type { Package } from '@app/types/spdx';
 
 export interface SbomDiff {
   summary: {

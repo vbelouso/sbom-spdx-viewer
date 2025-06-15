@@ -10,7 +10,7 @@ export interface SPDXDocument {
   };
   packages: Package[];
   files?: unknown[];
-  relationships?: unknown[];
+  relationships?: Relationship[];
 }
 export interface Package {
   name: string;
@@ -35,4 +35,9 @@ export interface ExternalRef {
 export interface PerformanceMetrics {
   parseTime: number;
   fileSize: number;
+}
+export interface Relationship {
+  spdxElementId: string;
+  relatedSpdxElement: string;
+  relationshipType: string;
 }

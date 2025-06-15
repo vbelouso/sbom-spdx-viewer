@@ -1,4 +1,4 @@
-import type { Package } from '../types/spdx';
+import type { Package } from '@app/types/spdx';
 
 async function* streamOciPackages(stream: ReadableStream<Uint8Array>, fileName: string) {
   console.log(`[Worker] streamOciPackages: Starting to process ${fileName}`);

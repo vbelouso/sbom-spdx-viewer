@@ -35,8 +35,8 @@ import ChangeHistoryIcon from '@mui/icons-material/ChangeHistory';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 
-import type { SbomDiff } from '../hooks/useSbomDiff';
-import type { Package } from '../types/spdx';
+import type { SbomDiff } from '@app/hooks/useSbomDiff';
+import type { Package } from '@app/types/spdx';
 import {
   useReactTable,
   getCoreRowModel,

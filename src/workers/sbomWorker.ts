@@ -1,4 +1,4 @@
-import type { SPDXDocument } from '../types/spdx.d.ts';
+import type { SPDXDocument } from '@app/types/spdx.d.ts';
 self.onmessage = async (event: MessageEvent<File>) => {
   const file = event.data;
   try {

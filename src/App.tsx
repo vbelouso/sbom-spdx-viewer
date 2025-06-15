@@ -15,12 +15,13 @@ import {
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
-import { useSBOMLoader } from './hooks/useSBOMLoader';
-import { PackageList } from './components/PackageList';
-import SimpleFileUpload from './components/SimpleFileUpload';
-import { useSbomDiff } from './hooks/useSbomDiff';
-import { SbomDiffView } from './components/SbomDiffView';
-import FileUploadCard from './components/FileUploadCard';
+import { useSBOMLoader } from '@app/hooks/useSBOMLoader';
+import { PackageList } from '@app/components/PackageList';
+import SimpleFileUpload from '@app/components/SimpleFileUpload';
+import { useSbomDiff } from '@app/hooks/useSbomDiff';
+import { SbomDiffView } from '@app/components/SbomDiffView';
+import FileUploadCard from '@app/components/FileUploadCard';
+import { RelationshipsTable } from '@app/components/RelationshipsTable';
 
 const getPurlType = (purl: string | undefined): string | null => {
   if (!purl) return null;
@@ -34,6 +35,7 @@ const getPurlType = (purl: string | undefined): string | null => {
 
 function App() {
   const [view, setView] = useState<'single' | 'diff'>('single');
+  const [tab, setTab] = useState<'packages' | 'relationships'>('packages');
 
   const {
     status: singleFileStatus,
@@ -45,6 +47,9 @@ function App() {
   } = useSBOMLoader();
   const [globalFilter, setGlobalFilter] = useState('');
   const [packageTypeFilter, setPackageTypeFilter] = useState('all');
+
+  const [relationshipGlobalFilter, setRelationshipGlobalFilter] = useState('');
+  const [relationshipTypeFilter, setRelationshipTypeFilter] = useState('');
 
   const availablePackageTypes = useMemo(() => {
     if (!singleFileData?.packages) return [];
@@ -68,10 +73,39 @@ function App() {
     });
   }, [singleFileData?.packages, packageTypeFilter]);
 
+  const availableRelationshipTypes = useMemo(() => {
+    if (!singleFileData?.relationships) return [];
+    return Array.from(new Set(singleFileData.relationships.map(r => r.relationshipType))).sort();
+  }, [singleFileData?.relationships]);
+
+  const filteredRelationships = useMemo(() => {
+    const allRelationships = singleFileData?.relationships || [];
+    if (!allRelationships.length) return [];
+
+    let items = allRelationships;
+
+    if (relationshipTypeFilter) {
+      items = items.filter(r => r.relationshipType === relationshipTypeFilter);
+    }
+
+    if (relationshipGlobalFilter) {
+      const lowercasedFilter = relationshipGlobalFilter.toLowerCase();
+      items = items.filter(
+        r =>
+          String(r.spdxElementId).toLowerCase().includes(lowercasedFilter) ||
+          String(r.relatedSpdxElement).toLowerCase().includes(lowercasedFilter)
+      );
+    }
+
+    return items;
+  }, [singleFileData?.relationships, relationshipTypeFilter, relationshipGlobalFilter]);
+
   const handleFileChange = useCallback(
     (_event: unknown, file: File) => {
       setGlobalFilter('');
       setPackageTypeFilter('all');
+      setRelationshipGlobalFilter('');
+      setRelationshipTypeFilter('');
       loadSbomFile(file);
     },
     [loadSbomFile]
@@ -141,18 +175,38 @@ function App() {
                 <Typography>
                   <b>Packages Displayed:</b> {filteredPackages.length} of {singleFileData.packages.length}
                 </Typography>
+                <Typography>
+                  <b>Relationships:</b> {(singleFileData.relationships?.length || 0).toLocaleString()}
+                </Typography>
               </Stack>
             </CardContent>
           </Card>
-          <PackageList
-            packages={filteredPackages}
-            globalFilter={globalFilter}
-            onGlobalFilterChange={setGlobalFilter}
-            packageTypeFilter={packageTypeFilter}
-            onPackageTypeFilterChange={setPackageTypeFilter}
-            availablePackageTypes={availablePackageTypes}
-            onLoadNewFile={handleLoadNewFile}
-          />
+          <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
+            <Tab label="Packages" value="packages" />
+            <Tab label="Relationships" value="relationships" />
+          </Tabs>
+          {tab === 'packages' && (
+            <PackageList
+              packages={filteredPackages}
+              globalFilter={globalFilter}
+              onGlobalFilterChange={setGlobalFilter}
+              packageTypeFilter={packageTypeFilter}
+              onPackageTypeFilterChange={setPackageTypeFilter}
+              availablePackageTypes={availablePackageTypes}
+              onLoadNewFile={handleLoadNewFile}
+            />
+          )}
+          {tab === 'relationships' && (
+            <RelationshipsTable
+              relationships={filteredRelationships}
+              totalRelationshipCount={filteredRelationships.length}
+              globalFilter={relationshipGlobalFilter}
+              onGlobalFilterChange={setRelationshipGlobalFilter}
+              relationshipTypeFilter={relationshipTypeFilter}
+              onRelationshipTypeFilterChange={setRelationshipTypeFilter}
+              availableRelationshipTypes={availableRelationshipTypes}
+            />
+          )}
         </>
       );
     }
